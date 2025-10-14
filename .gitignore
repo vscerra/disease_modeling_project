@@ -1,0 +1,25 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+*.vs/
+*.conda/
+*.vscode/
+*.npy
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environment files
+.env
+*.env
+tf-env/
+
+# Data files
+data/*
+*.sav
+*.csv
+!data/README.md
+
+# Model outputs
+outputs/*
