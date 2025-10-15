@@ -29,10 +29,11 @@ License: MIT
 ===========================================================
 """
 
-from typing import Dict, Tuple, Literal, Callable
+from typing import Dict, Tuple, Literal, Callable, Sequence
 import numpy as np
 import pandas as pd
 from .sir import SIRModel
+from .sir_piecewise import SIRPiecewiseBeta
 
 ObsType = Literal["I", "incidence"]
 
@@ -196,3 +197,136 @@ def fit_from_dataframe(df: pd.DataFrame, time_col: str, value_col: str, **kwargs
     t = df[time_col].to_numpy(dtype=float)
     y = df[value_col].to_numpy(dtype=float)
     return fit_beta_gamma(t, y, **kwargs)
+
+
+## Added for piecewise beta fitting
+
+def _simulate_observable_piecewise(
+    N: int,
+    gamma: float,
+    edges: np.ndarray,
+    betas: np.ndarray,
+    I0: int,
+    R0_init: int,
+    t: np.ndarray,
+    observable: ObsType
+) -> np.ndarray:
+    model = SIRPiecewiseBeta(N=N, gamma=gamma, edges=edges, betas=betas)
+    out = model.simulate(t=t, I0=I0, R0_init=R0_init)
+    return out["I"] if observable == "I" else out["incidence"]
+
+def _loss_with_scale(y_obs: np.ndarray, y_hat: np.ndarray, weights: np.ndarray | None) -> float:
+    a = float(np.dot(y_obs, y_hat) / (np.dot(y_hat, y_hat) + 1e-12))  # scale align
+    return _mse(y_obs, a * y_hat, weights)
+
+def fit_piecewise_beta(
+    t: np.ndarray,
+    y_obs: np.ndarray,
+    N: int,
+    I0: int,
+    edges: Sequence[float],
+    R0_init: int = 0,
+    observable: ObsType = "incidence",
+    beta_bounds: Tuple[float, float] = (0.05, 1.5),
+    gamma_bounds: Tuple[float, float] = (1/21, 1/3),
+    init_betas: Sequence[float] | None = None,
+    init_gamma: float | None = None,
+    weights: np.ndarray | None = None,
+    lambda_smooth: float = 0.0,       # L2 penalty on adjacent β differences
+    grid_gamma: int = 10,             # coarse grid over γ, then refine
+    step_beta: float = 0.03,
+    step_gamma: float = 0.01,
+    shrink: float = 0.5,
+    min_step: float = 1e-3,
+    max_iter: int = 300,
+    seed: int | None = 7
+) -> Dict[str, float | np.ndarray]:
+    """
+    Fit piecewise β(t) SIR by minimizing MSE (with scale) + optional smoothness penalty.
+
+    Args:
+        edges: segment boundaries in same units as t (len = K+1).
+        init_betas/gamma: optional initial guesses; otherwise mid-bounds.
+        lambda_smooth: weight of L2 penalty on (β_{k+1}-β_k)^2 to discourage overfitting.
+
+    Returns:
+        dict with betas, gamma, R0_segment (betas/gamma), loss, scale, y_fit, sim
+    """
+    assert len(t) == len(y_obs)
+    edges = np.asarray(edges, dtype=float)
+    K = len(edges) - 1
+    rng = np.random.default_rng(seed)
+
+    # inits
+    b_lo, b_hi = beta_bounds; g_lo, g_hi = gamma_bounds
+    betas = np.full(K, 0.5*(b_lo + b_hi), dtype=float) if init_betas is None else np.asarray(init_betas, dtype=float)
+    gamma = float(0.5*(g_lo + g_hi) if init_gamma is None else init_gamma)
+
+    # loss wrapper
+    def model_loss(betas_vec: np.ndarray, gamma_val: float) -> float:
+        y_hat = _simulate_observable_piecewise(N, gamma_val, edges, betas_vec, I0, R0_init, t, observable)
+        data_fit = _loss_with_scale(y_obs, y_hat, weights)
+        if lambda_smooth > 0 and len(betas_vec) > 1:
+            smooth = np.sum(np.diff(betas_vec)**2)
+            return float(data_fit + lambda_smooth * smooth)
+        return float(data_fit)
+
+    # coarse grid over gamma only
+    g_vals = np.linspace(g_lo, g_hi, grid_gamma)
+    best = {"betas": betas.copy(), "gamma": gamma, "loss": np.inf}
+    for g in g_vals:
+        val = model_loss(betas, g)
+        if val < best["loss"]:
+            best = {"betas": betas.copy(), "gamma": float(g), "loss": float(val)}
+
+    # coordinate pattern search over (betas, gamma)
+    betas = best["betas"].copy()
+    gamma = best["gamma"]
+    step_b = np.full(K, step_beta, dtype=float)
+    step_g = float(step_gamma)
+
+    for _ in range(max_iter):
+        improved = False
+
+        # try adjusting each beta_k up/down
+        for k in range(K):
+            for d in (+step_b[k], -step_b[k]):
+                trial = betas.copy()
+                trial[k] = float(np.clip(trial[k] + d, b_lo, b_hi))
+                val = model_loss(trial, gamma)
+                if val + 1e-12 < best["loss"]:
+                    best = {"betas": trial.copy(), "gamma": gamma, "loss": float(val)}
+                    betas = trial
+                    improved = True
+
+        # try adjusting gamma up/down
+        for d in (+step_g, -step_g):
+            g_try = float(np.clip(gamma + d, g_lo, g_hi))
+            val = model_loss(betas, g_try)
+            if val + 1e-12 < best["loss"]:
+                best = {"betas": betas.copy(), "gamma": g_try, "loss": float(val)}
+                gamma = g_try
+                improved = True
+
+        if not improved:
+            step_b *= shrink
+            step_g *= shrink
+            if np.all(step_b < min_step) and step_g < min_step:
+                break
+
+    # final simulate + scale and return
+    y_hat = _simulate_observable_piecewise(N, best["gamma"], edges, best["betas"], I0, R0_init, t, observable)
+    scale = float(np.dot(y_obs, y_hat) / (np.dot(y_hat, y_hat) + 1e-12))
+    model = SIRPiecewiseBeta(N=N, gamma=best["gamma"], edges=edges, betas=best["betas"])
+    sim = model.simulate(t=t, I0=I0, R0_init=R0_init)
+
+    return {
+        "betas": best["betas"],
+        "gamma": best["gamma"],
+        "R0_segments": best["betas"] / best["gamma"] if best["gamma"] > 0 else np.full(K, np.inf),
+        "loss": best["loss"],
+        "scale": scale,
+        "y_fit": scale * y_hat,
+        "sim": sim,
+        "edges": edges,
+    }
