@@ -1,6 +1,6 @@
 Disease Modeling Toolbox
 
-A modular, research-friendly toolbox for building and comparing epidemiological models. It starts with a clean SIR baseline on synthetic data and grows into real-world fitting, parameter sweeps, and model comparisons (SEIR, time-varying β, etc.).
+A modular, research-friendly toolbox for building and comparing compartmental epidemiological models. It starts with a clean SIR baseline on synthetic data and grows into real-world fitting, parameter sweeps, and model comparisons (SEIR, time-varying β, etc.).
 
 Key ideas
 
