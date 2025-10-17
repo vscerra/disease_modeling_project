@@ -6,7 +6,7 @@ Last Updated: 2025-10-11
 ===========================================================
 
 Description:
-    Estimate SIR parameters (beta, gamma) from time series by:
+    Estimate SIR and SEIR parameters (beta, gamma) from time series by:
       1) coarse grid search
       2) local pattern-search refinement
     Supports fitting to either I(t) (prevalence) or daily incidence.
@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 from .sir import SIRModel
 from .sir_piecewise import SIRPiecewiseBeta
+from .seir import SEIRModel
 
 ObsType = Literal["I", "incidence"]
 
@@ -329,4 +330,90 @@ def fit_piecewise_beta(
         "y_fit": scale * y_hat,
         "sim": sim,
         "edges": edges,
+    }
+
+
+## Added for SEIR 
+
+def fit_seir(
+    t: np.ndarray,
+    y_obs: np.ndarray,
+    N: int,
+    I0: int, 
+    E0: int = 0,
+    R0_init: int = 0,
+    observable: ObsType = "incidence",
+    beta_bounds: Tuple[float, float]  = (0.05, 1.2),
+    gamma_bounds: Tuple[float, float] = (1/14, 1/5),   # infectious period ~5–14d
+    sigma_bounds: Tuple[float, float] = (1/7, 1/2),    # incubation ~2–7d
+    grid_size: Tuple[int, int, int] = (10, 10, 8),
+    weights: np.ndarray | None = None,
+    refine: bool = True,
+    init_steps: Tuple[float, float, float] = (0.03, 0.01, 0.01),
+    random_restarts: int = 2,
+    seed: int | None = 42) -> Dict[str, float | np.ndarray]:
+    """
+    Estimate (beta, gamma, sigma) for SEIR by minimizing MSE between observed and simulated series
+    with an automatically learned global scale factor.
+    """
+    assert len(t) == len(y_obs)
+    rng = np.random.default_rng(seed)
+
+    def simulate(beta, gamma, sigma):
+        m = SEIRModel(N=N, beta=beta, gamma=gamma, sigma=sigma)
+        out = m.simulate(t=t, I0=I0, E0=E0, R0_init=R0_init)
+        return out["I"] if observable=="I" else out["incidence"]
+    
+    def loss(beta, gamma, sigma):
+        y_hat = simulate(beta, gamma, sigma)
+        a = float(np.dot(y_obs, y_hat) / (np.dot(y_hat, y_hat) + 1e-12))
+        return _mse(y_obs, a*y_hat, weights)
+    
+    # coarse grid
+    b_vals = np.linspace(*beta_bounds, grid_size[0])
+    g_vals = np.linspace(*gamma_bounds, grid_size[1])
+    s_vals = np.linspace(*sigma_bounds, grid_size[2])
+
+    best = {"beta": None, "gamma": None, "sigma": None, "loss": np.inf}
+    for b in b_vals:
+        for g in g_vals:
+            for s in s_vals:
+                val = loss(b,g,s)
+                if val < best["loss"]:
+                    best = {"beta": float(b), "gamma": float(g), "sigma": float(s), "loss": float(val)}
+
+    # local pattern search (coordinate-wise)
+    step_b, step_g, step_s = init_steps 
+    def clip(x, lo, hi): return float(min(max(x, lo), hi))
+
+    def try_dir(b, g, s, db, dg, ds):
+        nb = clip(b + db, *beta_bounds)
+        ng = clip(g + dg, *gamma_bounds)
+        ns = clip(s + ds, *sigma_bounds)
+        val = loss(nb, ng, ns)
+        return nb, ng, ns, val
+
+    if refine:
+        b, g, s = best["beta"], best["gamma"], best["sigma"]
+        while step_b > 1e-3 or step_g > 1e-3 or step_s > 1e-3:
+            improved = False
+            for (db, dg, ds) in [(+step_b,0,0),(-step_b,0,0),(0,+step_g,0),(0,-step_g,0),(0,0,+step_s),(0,0,-step_s)]:
+                nb, ng, ns, val = try_dir(b,g,s,db,dg,ds)
+                if val + 1e-12 < best["loss"]:
+                    best = {"beta": nb, "gamma": ng, "sigma": ns, "loss": float(val)}
+                    b, g, s = nb, ng, ns
+                    improved = True
+            if not improved:
+                step_b *= 0.5; step_g *= 0.5; step_s *= 0.5
+
+    # final simulate + scale
+    y_hat = simulate(best["beta"], best["gamma"], best["sigma"])
+    scale = float(np.dot(y_obs, y_hat) / (np.dot(y_hat, y_hat) + 1e-12))
+    sim = SEIRModel(N=N, beta=best["beta"], gamma=best["gamma"], sigma=best["sigma"]).simulate(
+        t=t, I0=I0, E0=E0, R0_init=R0_init
+    )
+    return {
+        "beta": best["beta"], "gamma": best["gamma"], "sigma": best["sigma"],
+        "R0": best["beta"]/best["gamma"] if best["gamma"]>0 else np.inf,
+        "loss": best["loss"], "scale": scale, "y_fit": scale * y_hat, "sim": sim
     }
