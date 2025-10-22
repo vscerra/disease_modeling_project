@@ -10,6 +10,7 @@ Description:
       1) coarse grid search
       2) local pattern-search refinement
     Supports fitting to either I(t) (prevalence) or daily incidence.
+      3) Using scipy least_squares fitting
 
 Example Usage:
     from epimodels.fitting import fit_beta_gamma
@@ -21,7 +22,7 @@ Example Usage:
     )
 
 Notes:
-    - No SciPy; uses RK4 integrator.
+    - No SciPy usage in the .seir_custom fitting; uses RK4 integrator 
     - Observations should align with t (same length).
     - Consider smoothing noisy incidence before fitting (moving average).
 -----------------------------------------------------------
@@ -34,7 +35,13 @@ import numpy as np
 import pandas as pd
 from .sir import SIRModel
 from .sir_piecewise import SIRPiecewiseBeta
-from .seir import SEIRModel
+from .seir_custom import SEIRModel
+from .seir_scipy_fit import SEIRParams, simulate_seir
+from __future__ import annotations
+from dataclasses import dataclass
+from scipy.optimize import least_squares
+
+
 
 ObsType = Literal["I", "incidence"]
 
@@ -335,7 +342,7 @@ def fit_piecewise_beta(
 
 ## Added for SEIR 
 
-def fit_seir(
+def fit_seir_custom(
     t: np.ndarray,
     y_obs: np.ndarray,
     N: int,
@@ -417,3 +424,79 @@ def fit_seir(
         "R0": best["beta"]/best["gamma"] if best["gamma"]>0 else np.inf,
         "loss": best["loss"], "scale": scale, "y_fit": scale * y_hat, "sim": sim
     }
+
+@dataclass
+class FitConfig:
+    # fixed clinical/vital parameters
+    sigma: float     # E->I (per week)
+    gamma: float     # I->R (per week)
+    mu: float        # vital rate (per week)
+    N: float         # population
+
+    # initial-condition ranges (fractions/absolutes)
+    S0_range: Tuple[float, float] = (0.05, 0.40)    # as fraction of N
+    E0_range: Tuple[float, float] = (1.0, 5e4)
+    I0_range: Tuple[float, float] = (1.0, 5e4)
+
+def _predict_cases(theta, t_grid, cfg: FitConfig):
+    beta0, beta1, phi, rho, lag, S0_scale, E0, I0 = theta
+    S0 = np.clip(S0_scale * cfg.N, 1.0, cfg.N - 1.0)
+    R0_init = cfg.N - (S0 + E0 + I0)
+    if R0_init < 0:
+        return np.full_like(t_grid, np.nan, dtype=float) 
+
+    p = SEIRParams(beta0=beta0, beta1=beta1, phi=phi,
+                   sigma=cfg.sigma, gamma=cfg.gamma, mu=cfg.mu, N=cfg.N)
+
+    SEIR = simulate_seir(t_grid, [S0, E0, I0, R0_init], p)
+    E_series = SEIR[1, :]
+    incidence = cfg.sigma * E_series  # new infections/week
+
+    if lag <= 1e-8:
+        reported = rho * incidence
+    else:
+        t_shifted = t_grid - lag
+        reported = rho * np.interp(t_grid, t_shifted, incidence, left=np.nan, right=np.nan)
+
+    return reported 
+
+def sqrt_poisson_resid(theta, t_obs, y_obs, cfg: FitConfig):
+    y_hat = _predict_cases(theta, t_obs, cfg)
+    if np.any(~np.isfinite(y_hat)):
+        return np.full_like(y_obs, 1e6, dtype=float)
+    return (np.sqrt(y_obs + 0.5) - np.sqrt(y_hat + 0.5))
+
+def fit_seasonal_seir(t_obs, y_obs, cfg: FitConfig):
+    # theta = [beta0, beta1, phi, rho, lag, S0_scale, E0, I0]
+    theta0 = np.array([700.0, 0.15, 0.0, 0.30, 1.0, 0.15, 100.0, 100.0], dtype=float)
+    lower  = np.array([ 50.0, 0.00,-0.5, 0.01, 0.0, cfg.S0_range[0], cfg.E0_range[0], cfg.I0_range[0]])
+    upper  = np.array([3000.0, 0.60, 0.5, 1.00, 2.0, cfg.S0_range[1], cfg.E0_range[1], cfg.I0_range[1]])
+
+    res = least_squares(
+        sqrt_poisson_resid, theta0, bounds=(lower, upper),
+        args=(t_obs, y_obs, cfg),
+        xtol=1e-8, ftol=1e-8, gtol=1e-8, max_nfev=200
+    )
+
+    theta_hat = res.x
+    beta0, beta1, phi, rho, lag, S0_scale, E0_hat, I0_hat = theta_hat
+    S0_hat = S0_scale * cfg.N
+    R0_min = (beta0 * (1 - beta1)) / (cfg.gamma + cfg.mu)
+    R0_max = (beta0 * (1 + beta1)) / (cfg.gamma + cfg.mu)
+
+    return {
+        'theta': theta_hat,
+        'S0': S0_hat,
+        'E0': E0_hat,
+        'I0': I0_hat,
+        'R0_range': (R0_min, R0_max),
+        'success': res.success,
+        'message': res.message,
+        'nfev': res.nfev,
+        'cost': res.cost,
+        'status': res.status
+    }
+
+# Public helper so notebooks can reuse prediction:
+def predict_reported(theta, t_grid, cfg: FitConfig):
+    return _predict_cases(theta, t_grid, cfg)

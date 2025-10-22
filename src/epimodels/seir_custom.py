@@ -1,12 +1,12 @@
 """
 ===========================================================
-seir.py
+seir_custom.py
 Author: Veronica Scerra
 Last Updated: 2025-10-17
 ===========================================================
 
 Description:
-    Deterministic SEIR (Susceptible–Exposed–Infectious–Recovered)
+    Deterministic SEIR (Susceptible-Exposed-Infectious-Recovered)
     model with constant rates and RK4 integration.
 
 API:
