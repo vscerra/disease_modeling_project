@@ -1,13 +1,13 @@
 """
 ===========================================================
-sir.py
+sir_custom.py
 Author: Veronica Scerra
 Last Updated: 2025-10-11
 ===========================================================
 
 Description:
-    Core deterministic SIR (Susceptible–Infectious–Recovered)
-    epidemiological model implemented using a Runge–Kutta 4th
+    Core deterministic SIR (Susceptible-Infectious-Recovered)
+    epidemiological model implemented using a Runge-Kutta 4th
     order integrator.
 
     Defines:

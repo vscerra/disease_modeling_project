@@ -1,6 +1,6 @@
 """
 ===========================================================
-fitting.py
+fitting_custom.py
 Author: Veronica Scerra
 Last Updated: 2025-10-11
 ===========================================================
@@ -33,7 +33,7 @@ License: MIT
 from typing import Dict, Tuple, Literal, Callable, Sequence
 import numpy as np
 import pandas as pd
-from .sir import SIRModel
+from .sir_custom import SIRModel
 from .sir_piecewise import SIRPiecewiseBeta
 from .seir_custom import SEIRModel
 from .seir_scipy_fit import SEIRParams, simulate_seir
