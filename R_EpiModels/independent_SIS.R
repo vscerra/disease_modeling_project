@@ -5,18 +5,18 @@
 ##===========================================================
 ## SIS (Susceptible-Infected-Susceptible) Model - no immunity
 
-## Modeling a curable disease in a closed population where 
+## Modeling a curable disease in a closed population where
 ## recovery does not induce immunity (e.g. a bacterial STI) and
-## infection status does not change behvaior: 
+## infection status does not change behvaior:
 ## - S: Susceptible individuals
 ## - I: Infected (and infectous) individuals
-## - S: Post-infection, individuals are once again susceptible, 
+## - S: Post-infection, individuals are once again susceptible,
 ##    no immunity is conferred by infection
 ## - Node heterogeneity is represented by two-level risk group designation
 ## with assortative mixing by level
 ## - 'One-mode' network - ties are allowed between all node types
 
-## This model assumes: 
+## This model assumes:
 ## - No immunity
 ## - No influence of status on behavior
 ##===========================================================
