@@ -221,9 +221,9 @@ class ParameterEstimator:
             'beta': (0.001, 10.0),
             'sigma': (0.01, 1.0),
             'gamma': (0.01, 1.0),
-            'alpha': (0.0, 0.5),
-            'vaccination_rate': (0.0, 0.1),
-            'vaccination_start': (0, 400)
+            'alpha': (0.005, 0.3),
+            'vaccination_rate': (0.0, 0.05),
+            'vaccination_start': (-3, 100)
         }
         
         for name, value in params.items():
@@ -258,9 +258,9 @@ class ParameterEstimator:
             'beta': (0.1, 5.0),
             'sigma': (1/14, 1/3),  # incubation 3-14 days
             'gamma': (1/14, 1/3),  # recovery 3-14 days
-            'alpha': (0.0, 0.3),   # CFR up to 30%
+            'alpha': (0.005, 0.3),   # CFR up to 30%
             'vaccination_rate': (0.0, 0.05),
-            'vaccination_start': (250, 270)  # Around Oct 1
+            'vaccination_start': (-3, 100)  # Around Oct 1
         }
         bounds = [bounds_dict.get(name, (0, 10)) for name in param_names]
         
@@ -328,9 +328,9 @@ class ParameterEstimator:
             'beta': (0.1, 5.0),
             'sigma': (1/14, 1/3),
             'gamma': (1/14, 1/3),
-            'alpha': (0.0, 0.3),
+            'alpha': (0.005, 0.3),
             'vaccination_rate': (0.0, 0.05),
-            'vaccination_start': (250, 270)
+            'vaccination_start': (-3, 100)
         }
         bounds = [bounds_dict.get(name, (0, 10)) for name in param_names]
         
