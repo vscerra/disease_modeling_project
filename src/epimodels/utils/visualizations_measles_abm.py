@@ -98,7 +98,7 @@ def plot_classroom_heatmap(
     matrix = np.zeros((len(grades), len(classrooms)))
 
     for (grade, classroom), counts in classroom_data.items():
-        grade_idx = grades.idx(grade)
+        grade_idx = grades.index(grade)
         classroom_idx = classrooms.index(classroom)
         matrix[grade_idx, classroom_idx] = counts[state] 
     

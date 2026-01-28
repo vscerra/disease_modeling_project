@@ -212,7 +212,7 @@ class School:
                        if s.state == DiseaseState.SUSCEPTIBLE]
         
         if target_grade is not None:
-            susceptible = [s for s in self.grade == target_grade]
+            susceptible = [s for s in susceptible if s.grade == target_grade]
         
         if len(susceptible) < n_infections:
             raise ValueError(f"Not enough susceptible students. "
@@ -227,6 +227,20 @@ class School:
             # immediately move to infectious for index cases
             student.state = DiseaseState.INFECTIOUS
             student.time_in_state = 0.0 
+
+    def get_counts(self) -> Dict[str, int]:
+        """Get current counts of students in each disease state"""
+        counts = {
+            'S': sum(1 for s in self.students 
+                    if s.state == DiseaseState.SUSCEPTIBLE),
+            'E': sum(1 for s in self.students 
+                    if s.state == DiseaseState.EXPOSED),
+            'I': sum(1 for s in self.students 
+                    if s.state == DiseaseState.INFECTIOUS),
+            'R': sum(1 for s in self.students 
+                    if s.state == DiseaseState.RECOVERED)
+        }
+        return counts
 
     def get_counts_by_classroom(self) -> Dict[Tuple[int, int], Dict[str, int]]:
         """Get disease state counts organized by (grade, classroom)"""
