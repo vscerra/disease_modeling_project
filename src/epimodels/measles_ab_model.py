@@ -1,8 +1,8 @@
 """
 ===========================================================
-abm_measles.py
+measles_ab_model.py
 Author: Veronica Scerra
-Last Updated: 2026-01-22
+Last Updated: 2026-01-28
 ===========================================================
 Agent-Based Model for Measles Transmission in Schools
 ======================================================
@@ -261,4 +261,162 @@ class MeaslesABM:
         self.params = params
         self.current_time = 0.0
         self.history = []
+
+    def simulate_contacts(self, infectious_student: Student) -> List[Student]:
+        """Generate contact list for an infectious student 
+        Parameters:
+        infectious_student: Student. The infectious individual making contacts
+
+        Returns: 
+        contacts: List[Student]. List of students contacted during this time step
+        """
+        contacts = []
+
+        # within-classroom contacts
+        n_within = np.random.poisson(self.params.contacts_within)
+        same_classroom = [
+            s for s in self.school.students 
+            if (s.grade == infectious_student.grade and 
+                s.classroom == infectious_student.classroom and
+                s.id != infectious_student.id and 
+                s.state == DiseaseState.SUSCEPTIBLE)
+        ]
+
+        n_within = min(n_within, len(same_classroom))
+        if n_within > 0:
+            within_contacts = np.random.choice(
+                same_classroom, n_within, replace=False
+            )
+            contacts.extend(within_contacts)
+
+        # between-classroom contacts (within same grade and other grades)
+        n_between = np.random.poisson(self.params.contacts_between)
+        other_students = [
+            s for s in self.school.students 
+            if (s.id != infectious_student.id and 
+                not (s.grade == infectious_student.grade and 
+                     s.classroom == infectious_student.classroom) and
+                s.state == DiseaseState.SUSCEPTIBLE)
+        ]
+
+        n_between = min(n_between, len(other_students))
+        if n_between > 0:
+            between_contacts = np.random.choice(
+                other_students, n_between, replace=False 
+            )
+            contacts.extend(between_contacts)
+        
+        return contacts 
+    
+    def transmission_step(self):
+        """Execute one time-step of transmission dynamics.
+        for each infectious individual:
+        1. Generate contacts (within and between classrooms)
+        2. Attempt transmission to each susceptible contact 
+        3. Update newly exposed individuals
+        """
+        infectious = [s for s in self.school.students 
+                      if s.state == DiseaseState.INFECTIOUS]
+        
+        newly_exposed = [] 
+
+        for infectious_student in infectious:
+            contacts = self.simulate_contacts(infectious_student) 
+
+            for contact in contacts:
+                # determine transmission probability based on contact type 
+                if (contact.grade == infectious_student.grade and 
+                    contact.classroom == infectious_student.classroom):
+                    beta = self.params.beta_within 
+                else:
+                    beta = self.params.beta_between 
+
+                # attempt transmission
+                if np.random.random() < beta:
+                    newly_exposed.append(contact)
+
+        # apply new exposures
+        for student in newly_exposed:
+            student.expose(self.current_time)
+
+    def progression_step(self, dt: float = 1.0):
+        """Advance disease progression for all infected individuals"""
+        for student in self.school.students:
+            if student.state in [DiseaseState.EXPOSED, DiseaseState.INFECTIOUS]:
+                student.progress_disease(self.params, dt)
+
+    def record_state(self):
+        """Record current state of the epidemic"""
+        counts = self.school.get_counts()
+        classroom_counts = self.school.get_counts_by_classroom()
+
+        record = {
+            'time': self.current_time,
+            'S': counts['S'],
+            'E': counts['E'],
+            'I': counts['I'],
+            'R': counts['R'],
+            'classroom_data': classroom_counts.copy()
+        }
+        self.history.append(record) 
+
+    def run(self, n_days: int, dt: float = 1.0,
+            record_interval: int = 1) -> List[Dict]:
+        """Run the ABM simulation for specified duration.
+        Parameters: 
+        n_days: int. Number of days to simulate
+        dt: float. Time step in days (default = 1.0)
+        record_interval: int. Number of time steps between recordings 
+
+        Returns:
+        history: List[Dict]. Time series of epidemic states 
+        """
+        self.history = [] 
+        self.current_time = 0.0
+        self.record_state() # record initial state 
+
+        n_steps = int(n_days / dt)
+
+        for step in range(n_steps):
+            # transmission dynamics
+            self.transmission_step()
+
+            # disease progression
+            self.progression_step(dt)
+
+            # update time
+            self.current_time += dt 
+
+            # record state periodically 
+            if (step + 1) % record_interval == 0:
+                self.record_state() 
+        return self.history 
+    
+    def get_final_attack_rate(self) -> float:
+        """Calculate final attack rate (fraction of susceptibles who got infected).
+        Returns:
+        attack_rate: float. Fraction of initially susceptible population that was infected
+        """
+        initial_susceptible = self.history[0]['S']
+        final_susceptible = self.history[-1]['S']
+
+        if initial_susceptible == 0:
+            return 0.0 
+        
+        return (initial_susceptible - final_susceptible) / initial_susceptible 
+    
+    def get_epidemic_peak(self) -> Tuple[float, int]:
+        """Find the epidemic peak.
+        Returns:
+        peak_time: float. Day of maximum infectious prevalence
+        peak_infectious: int. Maximum number of infectious individuals
+        """
+        infectious_counts = [record['I'] for record in self.history]
+        peak_infectious = max(infectious_counts)
+        peak_idx = infectious_counts.index(peak_infectious)
+        peak_time = self.history[peak_idx]['time']
+
+        return peak_time, peak_infectious 
+    
+    
         
