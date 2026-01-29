@@ -279,8 +279,9 @@ def compare_scenarios(
     # plot 2: Cumulative infections
     for idx, (scenario, history) in enumerate(scenario_results.items()):
         times = [record['time'] for record in history]
-        cumulative = [history[0]['R'] + history[0]['S'] - record['S'] 
-                     for record in history]
+        initial_R = history[0]['R']  # vaccinated + protected at start
+        cumulative = [record['R'] - initial_R  # only count recoveries
+             for record in history]
         axes[1].plot(times, cumulative, linewidth=2.5, 
                     label=scenario_labels[scenario],
                     color=colors[idx], alpha=0.8)
