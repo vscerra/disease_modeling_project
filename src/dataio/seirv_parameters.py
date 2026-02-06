@@ -39,11 +39,12 @@ class MeaslesParameters:
     death_rate: float = 8.0 / 1000 / 365    # natural death per person per day 
 
     # age-structure (for age-stratified vaccination)
-    age_groups = Dict[str, tuple] = None    # will be initialized in __post_init__ 
+    age_groups: Dict[str, tuple] = None    # will be initialized in __post_init__ 
 
     # ==================== Measles Epidemiology ===================================
     # basic reproduction number (highly contagious)
     R0: float = 15.0    # range 12-18 in literature 
+    HIT: float = 1 - (1/R0)
 
     # disease natural history
     latent_period: float = 10.0     # days (range 8-12)
@@ -69,8 +70,8 @@ class MeaslesParameters:
     age_second_dose: float = 4 * 365.0  # 4 years (in days)
 
     # baseline vaccination coverage (current state)
-    baseline_coverage_does1: float = 0.91   # 91% (US national average)
-    baseline_coverage_does2: float = 0.88   # 88% (US national average)
+    baseline_coverage_dose1: float = 0.91   # 91% (US national average)
+    baseline_coverage_dose2: float = 0.88   # 88% (US national average)
 
     # vaccine waning (minimal for measles)
     waning_rate: float = 0.0    # per day (measles immunity is lifelong)
@@ -163,6 +164,7 @@ class MeaslesParameters:
         """Convert parameters to dictionary for easy inspection."""
         return {
             'R0': self.R0,
+            'HIT': self.HIT,
             'latent_period_days': self.latent_period,
             'infectious_period_days': self.infectious_period,
             'beta': self.beta,
@@ -182,6 +184,7 @@ class MeaslesParameters:
         print("MEASLES VACCINATION MODEL PARAMETERS:")
         print("\n--- EPIDEMIOLOGY ---")
         print(f"R₀: {self.R0:.1f}")
+        print(f"Herd Immunity Threshold: {self.HIT*100:.1f}%")
         print(f"Latent period: {self.latent_period:.1f} days")
         print(f"Infectious period: {self.infectious_period:.1f} days")
         print(f"Transmission rate (β): {self.beta:.3f} per day")
@@ -201,21 +204,25 @@ class MeaslesParameters:
        
 
 # Alternative parameter sets for sensitivity analysis
-class LowTransmissionParameters(MeaslesParameters):
-    """Conservative scenario with lower R0."""
-    R0: float = 12.0
+def create_low_transmission_params():
+    """Create situation where R0 is lower"""
+    return MeaslesParameters(
+        R0 = 10.0
+    )
 
+def create_high_transmission_params():
+    """Situation where R0 is higher"""
+    return MeaslesParameters(
+        R0 = 18
+    )
 
-class HighTransmissionParameters(MeaslesParameters):
-    """Aggressive scenario with higher R0."""
-    R0: float = 18.0
-
-
-class LowCoverageParameters(MeaslesParameters):
-    """Scenario with vaccine hesitancy - lower baseline coverage."""
-    baseline_coverage_dose1: float = 0.75  # 75%
-    baseline_coverage_dose2: float = 0.71  # 71%
-
+def create_low_coverage_params():
+    """Create low coverage scenario."""
+    return MeaslesParameters(
+        baseline_coverage_dose1=0.75,
+        baseline_coverage_dose2=0.68,
+        initial_vaccinated = .75
+    )
 
 if __name__ == "__main__":
     # Test parameter initialization

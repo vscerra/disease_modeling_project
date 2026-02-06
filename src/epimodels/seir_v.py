@@ -20,7 +20,7 @@ License: MIT
 """
 import numpy as np 
 import matplotlib.pyplot as plt 
-from scipy.integrate import odeint 
+from scipy.integrate import solve_ivp
 from typing import Tuple, Dict, Optional 
 
 class SEIRVModel:
@@ -96,7 +96,7 @@ class SEIRVModel:
         Returns:
         dydt : np.ndarray. Derivatives [dS/dt, dE/dt, dI/dt, dR/dt, dV/dt]
         """
-        S, E, I, R, V = y
+        S, E, I, R, V = np.maximum(y, 0)
         N = S + E + I + R + V
         
         # parameters
@@ -152,10 +152,17 @@ class SEIRVModel:
         y0 = self.initial_conditions()
         
         # Solve ODE
-        solution = odeint(self.derivatives, y0, t)
+        solution = solve_ivp(
+            lambda t, y: self.derivatives(y, t),
+            [0, t_max],
+            y0,
+            t_eval = t,
+            method = 'BDF',      # good for stiff equations
+            max_step = 1.0
+        )
         
         # Extract compartments
-        S, E, I, R, V = solution.T
+        S, E, I, R, V = solution.y
         
         # Calculate cumulative infections (new infections over time)
         N = S + E + I + R + V
