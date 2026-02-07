@@ -47,8 +47,8 @@ class MeaslesParameters:
     HIT: float = 1 - (1/R0)
 
     # disease natural history
-    latent_period: float = 10.0     # days (range 8-12)
-    infectious_period: float = 8.0  # days (range 6-10) 
+    latent_period: float = 8.0     # days (range 8-12)
+    infectious_period: float = 10.0  # days (range 6-10) 
 
     # derived transmission parameters
     sigma: float = None     # 1/latent_period (progression rate from E to I)
@@ -85,7 +85,7 @@ class MeaslesParameters:
     # disease treatment costs
     outpatient_treatment_cost: float = 150.0    # mild case, outpatient
     hospitalization_cost: float = 8_000.0       # severe case, hospitalized
-    complication_treatement_cost: float = 3_000.0 # SSPE, encephalitis treatment
+    complication_treatment_cost: float = 3_000.0 # SSPE, encephalitis treatment
 
     # outbreak response costs
     contact_tracing_cost_per_case: float = 5_000.0  # public health response
