@@ -39,7 +39,7 @@ class BehavioralParameters:
     vaccine_perceived_risk: float = 0.0001      # perceived risk of vaccine adverse event
     vaccine_perceived_severity: float = 1000.0  # perceived cost of adverse event ($)
 
-    disease_perceived_severity: float = 10000.0 # perceived cost of infection ($)
+    disease_perceived_severity: float = 50000.0 # perceived cost of infection ($)
     
     # WHO 3 C's Framework
     # evidence-based determinants from WHO SAGE (2015)
@@ -146,8 +146,8 @@ class BehavioralDecisionModel:
     
     def perceived_infection_risk(self, 
                                 prevalence: float,
-                                R0: float,
-                                vaccination_coverage: float) -> float:
+                                vaccination_coverage: float,
+                                R0: float) -> float:
         """Calculate PERCEIVED probability of infection (includes biases)
         
         This combines:
@@ -165,7 +165,7 @@ class BehavioralDecisionModel:
         """
         # start with objective risk
         objective_risk = self._calculate_infection_probability(
-            prevalence, R0, vaccination_coverage
+            prevalence, vaccination_coverage, R0
         )
         
         # apply risk perception bias
@@ -228,7 +228,7 @@ class BehavioralDecisionModel:
             utility: float. Utility of not vaccinating (negative = expected cost, higher is better)
         """
         # perceived infection risk
-        infection_risk = self.perceived_infection_risk(prevalence, R0, vaccination_coverage)
+        infection_risk = self.perceived_infection_risk(prevalence, vaccination_coverage, R0)
         
         # expected disease cost
         expected_cost = infection_risk * self.params.disease_perceived_severity
@@ -247,8 +247,8 @@ class BehavioralDecisionModel:
     
     def vaccination_rate(self,
                         prevalence: float,
-                        R0: float,
                         vaccination_coverage: float,
+                        R0: float,
                         baseline_rate: float,
                         susceptible_pop: float) -> float:
         """Calculate population-level vaccination rate based on individual decisions.
@@ -265,7 +265,7 @@ class BehavioralDecisionModel:
             vax_rate : float. Vaccination rate (people per day)
         """
         # Get probability individual chooses vaccination
-        prob_vax = self.vaccination_probability(prevalence, R0, vaccination_coverage)
+        prob_vax = self.vaccination_probability(prevalence, vaccination_coverage, R0)
         
         # Convert to population rate: mix behavioral decision with baseline routine vaccination
         behavioral_weight = 0.8                         # How much behavior matters (80%) vs routine (20%)
@@ -298,13 +298,13 @@ class BehavioralDecisionModel:
             prob_vaccinate: float. Probability of vaccination (0-1)
         """
         u_vax = self.utility_vaccinate()
-        u_no_vax = self.utility_no_vaccine(prevalence, vaccination_coverage, R0)
+        u_no_vax = self.utility_no_vaccinate(prevalence, vaccination_coverage, R0)
 
         # utility difference
         delta_u = u_vax - u_no_vax 
 
         # logistic choice (quantal response) Temperature parameter: higher = more noise/randomness
-        temperature = 1000.0
+        temperature = 100.0
         prob = 1.0 / (1.0 + np.exp(-delta_u / temperature))
 
         # apply social influence: people are influenced by what others do
