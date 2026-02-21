@@ -115,7 +115,7 @@ Open any notebook in `notebooks/` and run top to bottom.
 
 ## Key References
 
-- See [References](https://vscerra.github.io/disease_modeling/references) 
+- See [References](https://vscerra.github.io/projects/disease_modeling/resources.html) 
 
 ---
 
