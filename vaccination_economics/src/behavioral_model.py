@@ -39,7 +39,7 @@ class BehavioralParameters:
     vaccine_perceived_risk: float = 0.0001      # perceived risk of vaccine adverse event
     vaccine_perceived_severity: float = 1000.0  # perceived cost of adverse event ($)
 
-    disease_perceived_severity: float = 50000.0 # perceived cost of infection ($)
+    disease_perceived_severity: float = 100000.0 # perceived cost of infection ($)
     
     # WHO 3 C's Framework
     # evidence-based determinants from WHO SAGE (2015)
@@ -48,8 +48,8 @@ class BehavioralParameters:
                                                 # reduces perceived vaccine risk: actual risk x (1 - confidence)
 
     # complacency: risk perception when disease is rare
-    complacency_threshold: float = 0.001        # prevalence below which complacency occurs
-    complacency_strength: float = 0.5           # how much complacency reduces perceived risk (0-1)
+    complacency_threshold: float = 0.0001        # prevalence below which complacency occurs
+    complacency_strength: float = 0.3           # how much complacency reduces perceived risk (0-1)
                                                 # when prevalence < threshold: perceived_risk x (1 - complacency_strength)
 
     # convenience: accessibility and ease of vaccination
@@ -62,12 +62,14 @@ class BehavioralParameters:
                                                 # >1 = risk-averse (concave utility), <1 = risk-seeking (convex)
                                                 # literature range: 0.5-4.0 (Galvani et al. 2007)
     # risk perception bias: multiplier on objective disease risk
-    risk_perception_bias: float = 1.0           # 1.0 = accurate perception, >1 = overestimate disease risk, <1 = underestimate 
+    risk_perception_bias: float = 1.0          # 1.0 = accurate perception, >1 = overestimate disease risk, <1 = underestimate 
                                                 # influenced by media effects, information quality, etc. 
     
     # Social Dynamics - for future extensions
     social_influence_weight: float = 0.1        # weight on others' behavior vs. own utility
                                                 # 0 = totally individual decision, 1 = purely imitative 
+    behavioral_fraction: float = 0.10           # Proportion of vaccination that responds to disease prevalence. 10% responsive/behavioral, 90% routine
+    temperature: float = 100.0                  # decision noise in logistic choice - higher = less responsive to utility differences, lower = more responsive
     
     # Policy Parameters
     vaccine_subsidy: float = 0.0                # $ reduction in perceived cost, ex. 46.0 = fully free, 0.0 = full out-of-pocket
@@ -268,13 +270,17 @@ class BehavioralDecisionModel:
         prob_vax = self.vaccination_probability(prevalence, vaccination_coverage, R0)
         
         # Convert to population rate: mix behavioral decision with baseline routine vaccination
-        behavioral_weight = 0.8                         # How much behavior matters (80%) vs routine (20%)
-        effective_prob = (behavioral_weight * prob_vax + (1 - behavioral_weight) * vaccination_coverage)
+        # Split between routine (schedule-based) and behavioral (prevalence-responsive)
+        routine_fraction = 1.0 - self.params.behavioral_fraction
+        responsive_fraction = self.params.behavioral_fraction
         
-        # Rate is proportion of susceptibles choosing vaccination. Scale by baseline rate to maintain realistic timescales
-        rate = effective_prob * baseline_rate
+        # Mix routine vaccination with behavioral response
+        routine_rate = routine_fraction * baseline_rate
+        responsive_rate = responsive_fraction * prob_vax * baseline_rate
         
-        return rate
+        total_rate = routine_rate + responsive_rate
+        
+        return total_rate
     
     def vaccination_probability(self,
                                prevalence: float,
@@ -304,7 +310,7 @@ class BehavioralDecisionModel:
         delta_u = u_vax - u_no_vax 
 
         # logistic choice (quantal response) Temperature parameter: higher = more noise/randomness
-        temperature = 100.0
+        temperature = self.params.temperature
         prob = 1.0 / (1.0 + np.exp(-delta_u / temperature))
 
         # apply social influence: people are influenced by what others do

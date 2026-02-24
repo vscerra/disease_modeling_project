@@ -70,7 +70,7 @@ class MeaslesParameters:
     age_second_dose: float = 4 * 365.0  # 4 years (in days)
 
     # baseline vaccination coverage (current state)
-    baseline_coverage_dose1: float = 0.91   # 91% (US national average)
+    baseline_coverage_dose1: float = 0.925   # 92.5% (US national average)
     baseline_coverage_dose2: float = 0.88   # 88% (US national average)
 
     # vaccine waning (minimal for measles)

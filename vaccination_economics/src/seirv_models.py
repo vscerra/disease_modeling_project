@@ -316,7 +316,7 @@ class SEIRVModel:
 
 if __name__ == "__main__":
     # test the model
-    from dataio.seirv_parameters import MeaslesParameters
+    from seirv_parameters import MeaslesParameters
     
     print("Initializing SEIR-V model...")
     params = MeaslesParameters()
